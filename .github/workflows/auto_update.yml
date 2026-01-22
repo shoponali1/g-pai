@@ -1,0 +1,45 @@
+name: Auto Scrape and Save Data
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'  # প্রতি ২ ঘন্টায়
+  workflow_dispatch:  # Manual run option
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.21'
+        cache: false
+    
+    - name: Install dependencies
+      run: go mod download
+    
+    - name: Build scraper
+      run: go build -mod=mod -o scraper main.go
+    
+    - name: Create data folder
+      run: mkdir -p data
+    
+    - name: Run scraper (30 seconds)
+      run: |
+        timeout 30s ./scraper || true
+    
+    - name: Move data files
+      run: |
+        mv gold_silver_prices.csv data/ 2>/dev/null || true
+        mv gold_silver_prices.json data/ 2>/dev/null || true
+    
+    - name: Commit and Push
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add data/
+        git diff --staged --quiet || git commit -m "📊 Auto-update: $(date +'%Y-%m-%d %H:%M')"
+        git push
