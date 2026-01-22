@@ -14,16 +14,19 @@ import (
 )
 
 type MetalPrice struct {
-	Timestamp   string  `json:"timestamp"`
-	Date        string  `json:"date"`
-	Time        string  `json:"time"`
-	Gold22K     float64 `json:"gold_22k"`
-	Gold21K     float64 `json:"gold_21k"`
-	Gold18K     float64 `json:"gold_18k"`
-	Traditional float64 `json:"traditional_gold"`
-	SilverPrice float64 `json:"silver_price"`
-	Source      string  `json:"source"`
-	Currency    string  `json:"currency"`
+	Timestamp         string  `json:"timestamp"`
+	Date              string  `json:"date"`
+	Time              string  `json:"time"`
+	Gold22K           float64 `json:"gold_22k"`
+	Gold21K           float64 `json:"gold_21k"`
+	Gold18K           float64 `json:"gold_18k"`
+	Traditional       float64 `json:"traditional_gold"`
+	Silver22K         float64 `json:"silver_22k"`
+	Silver21K         float64 `json:"silver_21k"`
+	Silver18K         float64 `json:"silver_18k"`
+	SilverTraditional float64 `json:"silver_traditional"`
+	Source            string  `json:"source"`
+	Currency          string  `json:"currency"`
 }
 
 const (
@@ -68,7 +71,6 @@ func scrapeAndSave() {
 
 	if err != nil || prices == nil || prices.Gold22K == 0 {
 		log.Println("⚠️  Using estimated prices (Scrape failed)")
-		// existing fallback logic could be kept or updated, but for now we warn
 		if prices == nil {
 			prices = getEstimatedPrices()
 		}
@@ -86,22 +88,19 @@ func scrapeAndSave() {
 		log.Println("✅ Successfully saved to JSON")
 	}
 
-	log.Printf("📊 Gold 22K: %.2f | 21K: %.2f | 18K: %.2f | Silver: %.2f\n",
-		prices.Gold22K, prices.Gold21K, prices.Gold18K, prices.SilverPrice)
+	log.Printf("📊 Gold 22K: %.2f | Silver 22K: %.2f\n",
+		prices.Gold22K, prices.Silver22K)
 }
 
-// Structures for parsing the JS JSON data
+// Structs for parsing the JS JSON data
 type GoldItem struct {
-	N     string  `json:"n"`      // Name, e.g. "22 carat gold price"
-	BvRaw float64 `json:"bv_raw"` // Buy Value Raw (per Bhori?) - matches the big numbers around 100k+
-	SvRaw float64 `json:"sv_raw"` // Sell Value Raw
-	BgRaw float64 `json:"bg_raw"` // Buy Gram Raw
+	N     string  `json:"n"`
+	BvRaw float64 `json:"bv_raw"`
 }
 
 type SilverItem struct {
 	N     string  `json:"n"`
 	BvRaw float64 `json:"bv_raw"`
-	BgRaw float64 `json:"bg_raw"`
 }
 
 func scrapePrices() (*MetalPrice, error) {
@@ -116,7 +115,6 @@ func scrapePrices() (*MetalPrice, error) {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
-	// Important: Set User-Agent to avoid 403
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "*/*")
 
@@ -138,7 +136,6 @@ func scrapePrices() (*MetalPrice, error) {
 	content := string(body)
 
 	// Extract Gold Data
-	// const GoldrPriceTable_goldData = [...];
 	goldRegex := regexp.MustCompile(`const\s+GoldrPriceTable_goldData\s*=\s*(\[.*?\]);`)
 	goldMatches := goldRegex.FindStringSubmatch(content)
 	if len(goldMatches) < 2 {
@@ -146,14 +143,12 @@ func scrapePrices() (*MetalPrice, error) {
 	}
 
 	// Extract Silver Data
-	// const GoldrPriceTable_silverData = [...];
 	silverRegex := regexp.MustCompile(`const\s+GoldrPriceTable_silverData\s*=\s*(\[.*?\]);`)
 	silverMatches := silverRegex.FindStringSubmatch(content)
 	if len(silverMatches) < 2 {
 		return nil, fmt.Errorf("could not find silver data in JS")
 	}
 
-	// Parse JSON
 	var goldItems []GoldItem
 	if err := json.Unmarshal([]byte(goldMatches[1]), &goldItems); err != nil {
 		return nil, fmt.Errorf("failed to parse gold json: %v", err)
@@ -177,19 +172,21 @@ func scrapePrices() (*MetalPrice, error) {
 		Currency:  "BDT",
 	}
 
-	// Mapping based on array index from observation of the JS file:
-	// 0: 22K
-	// 1: 21K
-	// 2: 18K
-	// 3: Traditional
+	// Gold Mapping
 	price.Gold22K = goldItems[0].BvRaw
 	price.Gold21K = goldItems[1].BvRaw
 	price.Gold18K = goldItems[2].BvRaw
 	price.Traditional = goldItems[3].BvRaw
 
-	// Silver: taking 22K (index 0) as the reference price
-	if len(silverItems) > 0 {
-		price.SilverPrice = silverItems[0].BvRaw
+	// Silver Mapping
+	// Based on array order in JS: 0=22K, 1=21K, 2=18K, 3=Traditional
+	if len(silverItems) >= 4 {
+		price.Silver22K = silverItems[0].BvRaw
+		price.Silver21K = silverItems[1].BvRaw
+		price.Silver18K = silverItems[2].BvRaw
+		price.SilverTraditional = silverItems[3].BvRaw
+	} else if len(silverItems) > 0 {
+		price.Silver22K = silverItems[0].BvRaw // Fallback
 	}
 
 	log.Println("✅ Prices extracted successfully!")
@@ -205,16 +202,19 @@ func getEstimatedPrices() *MetalPrice {
 	now := time.Now()
 
 	return &MetalPrice{
-		Timestamp:   now.Format(time.RFC3339),
-		Date:        now.Format("2006-01-02"),
-		Time:        now.Format("15:04:05"),
-		Gold22K:     78500.00,
-		Gold21K:     75200.00,
-		Gold18K:     64300.00,
-		Traditional: 78500.00,
-		SilverPrice: 95000.00,
-		Source:      "Estimated (bot.tools-time.com unavailable)",
-		Currency:    "BDT",
+		Timestamp:         now.Format(time.RFC3339),
+		Date:              now.Format("2006-01-02"),
+		Time:              now.Format("15:04:05"),
+		Gold22K:           252000.00, // Updated to approx market
+		Gold21K:           240000.00,
+		Gold18K:           206000.00,
+		Traditional:       169000.00,
+		Silver22K:         6800.00,
+		Silver21K:         6500.00,
+		Silver18K:         5600.00,
+		SilverTraditional: 4200.00,
+		Source:            "Estimated (Scrape Failed)",
+		Currency:          "BDT",
 	}
 }
 
@@ -235,7 +235,12 @@ func saveToCSV(price *MetalPrice) error {
 	defer writer.Flush()
 
 	if !fileExists {
-		header := []string{"Timestamp", "Date", "Time", "Gold_22K", "Gold_21K", "Gold_18K", "Traditional", "Silver", "Currency", "Source"}
+		header := []string{
+			"Timestamp", "Date", "Time",
+			"Gold_22K", "Gold_21K", "Gold_18K", "Traditional_Gold",
+			"Silver_22K", "Silver_21K", "Silver_18K", "Traditional_Silver",
+			"Currency", "Source",
+		}
 		writer.Write(header)
 	}
 
@@ -247,7 +252,10 @@ func saveToCSV(price *MetalPrice) error {
 		fmt.Sprintf("%.2f", price.Gold21K),
 		fmt.Sprintf("%.2f", price.Gold18K),
 		fmt.Sprintf("%.2f", price.Traditional),
-		fmt.Sprintf("%.2f", price.SilverPrice),
+		fmt.Sprintf("%.2f", price.Silver22K),
+		fmt.Sprintf("%.2f", price.Silver21K),
+		fmt.Sprintf("%.2f", price.Silver18K),
+		fmt.Sprintf("%.2f", price.SilverTraditional),
 		price.Currency,
 		price.Source,
 	}
