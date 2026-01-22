@@ -22,13 +22,13 @@ jobs:
       run: go mod download
     
     - name: Build
-      run: go build -v ./...
+      run: go build -mod=mod -v ./...
     
     - name: Run connection test
-      run: go run test_connection.go || true
+      run: go run -mod=mod test_connection.go || true
     
     - name: Build binary
-      run: go build -o scraper main.go
+      run: go build -mod=mod -o scraper main.go
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
