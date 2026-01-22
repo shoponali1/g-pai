@@ -2,8 +2,8 @@ name: Auto Scrape and Save Data
 
 on:
   schedule:
-    - cron: '0 */2 * * *'  # প্রতি ২ ঘন্টায়
-  workflow_dispatch:  # Manual run option
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
 
 jobs:
   scrape:
@@ -21,25 +21,53 @@ jobs:
     - name: Install dependencies
       run: go mod download
     
-    - name: Build scraper
-      run: go build -mod=mod -o scraper main.go
-    
     - name: Create data folder
       run: mkdir -p data
     
-    - name: Run scraper (30 seconds)
+    - name: Build and run scraper
       run: |
+        go build -mod=mod -o scraper main.go
         timeout 30s ./scraper || true
+        echo "Scraper finished"
     
-    - name: Move data files
+    - name: List files (debug)
       run: |
-        mv gold_silver_prices.csv data/ 2>/dev/null || true
-        mv gold_silver_prices.json data/ 2>/dev/null || true
+        echo "Files in current directory:"
+        ls -la
+        echo "Files in data directory:"
+        ls -la data/ || echo "data folder empty"
     
-    - name: Commit and Push
+    - name: Move data files to data folder
+      run: |
+        if [ -f "gold_silver_prices.csv" ]; then
+          cp gold_silver_prices.csv data/
+          echo "✅ CSV moved"
+        else
+          echo "❌ CSV not found"
+        fi
+        
+        if [ -f "gold_silver_prices.json" ]; then
+          cp gold_silver_prices.json data/
+          echo "✅ JSON moved"
+        else
+          echo "❌ JSON not found"
+        fi
+    
+    - name: Check data folder
+      run: |
+        echo "Final files in data folder:"
+        ls -la data/
+    
+    - name: Commit and push if changes exist
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
         git add data/
-        git diff --staged --quiet || git commit -m "📊 Auto-update: $(date +'%Y-%m-%d %H:%M')"
-        git push
+        
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "📊 Auto-update: $(date +'%Y-%m-%d %H:%M')"
+          git push
+          echo "✅ Changes pushed"
+        fi
