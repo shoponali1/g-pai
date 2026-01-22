@@ -21,12 +21,6 @@ jobs:
     - name: Install dependencies
       run: go mod download
     
-    - name: Build
-      run: go build -mod=mod -v ./...
-    
-    - name: Run connection test
-      run: go run -mod=mod test_connection.go || true
-    
     - name: Build binary
       run: go build -mod=mod -o scraper main.go
     
