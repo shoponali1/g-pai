@@ -1,0 +1,18 @@
+[Unit]
+Description=Gold and Silver Price Scraper
+After=network.target
+
+[Service]
+Type=simple
+User=your-username
+WorkingDirectory=/path/to/gold-silver-scraper
+ExecStart=/path/to/gold-silver-scraper/scraper
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/var/log/gold-scraper.log
+StandardError=append:/var/log/gold-scraper-error.log
+
+[Install]
+WantedBy=multi-user.target
