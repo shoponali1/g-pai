@@ -12,8 +12,8 @@ scraper
 gold-silver-scraper
 
 # Data files (uncomment if you want to track them)
-gold_silver_prices.csv
-gold_silver_prices.json
+# gold_silver_prices.csv
+# gold_silver_prices.json
 
 # Go workspace
 go.work

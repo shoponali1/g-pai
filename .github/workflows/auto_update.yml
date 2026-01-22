@@ -22,7 +22,7 @@ jobs:
       run: go mod download
     
     - name: Create data folder
-      run: mkdir -p data
+      run: mkdir -p Data
     
     - name: Build and run scraper
       run: |
@@ -34,20 +34,20 @@ jobs:
       run: |
         echo "Files in current directory:"
         ls -la
-        echo "Files in data directory:"
-        ls -la data/ || echo "data folder empty"
+        echo "Files in Data directory:"
+        ls -la Data/ || echo "Data folder empty"
     
-    - name: Move data files to data folder
+    - name: Move data files to Data folder
       run: |
         if [ -f "gold_silver_prices.csv" ]; then
-          cp gold_silver_prices.csv data/
+          cp gold_silver_prices.csv Data/
           echo "✅ CSV moved"
         else
           echo "❌ CSV not found"
         fi
         
         if [ -f "gold_silver_prices.json" ]; then
-          cp gold_silver_prices.json data/
+          cp gold_silver_prices.json Data/
           echo "✅ JSON moved"
         else
           echo "❌ JSON not found"
@@ -55,14 +55,14 @@ jobs:
     
     - name: Check data folder
       run: |
-        echo "Final files in data folder:"
-        ls -la data/
+        echo "Final files in Data folder:"
+        ls -la Data/
     
     - name: Commit and push if changes exist
       run: |
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
-        git add data/
+        git add Data/
         
         if git diff --staged --quiet; then
           echo "No changes to commit"
