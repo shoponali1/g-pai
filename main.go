@@ -8,11 +8,9 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
+	"io"
 )
 
 type MetalPrice struct {
@@ -29,8 +27,7 @@ type MetalPrice struct {
 }
 
 const (
-	// bot.tools-time.com URL
-	baseURL        = "https://bot.tools-time.com"
+	targetURL      = "https://www.goldr.org/price.js"
 	scrapeInterval = 2 * time.Hour
 	maxRetries     = 3
 )
@@ -38,7 +35,7 @@ const (
 func main() {
 	log.Println("===========================================")
 	log.Println("Gold & Silver Price Scraper")
-	log.Printf("Source: %s\n", baseURL)
+	log.Printf("Source: %s\n", targetURL)
 	log.Printf("Scraping interval: %v\n", scrapeInterval)
 	log.Println("===========================================")
 
@@ -70,8 +67,11 @@ func scrapeAndSave() {
 	}
 
 	if err != nil || prices == nil || prices.Gold22K == 0 {
-		log.Println("⚠️  Using estimated prices")
-		prices = getEstimatedPrices()
+		log.Println("⚠️  Using estimated prices (Scrape failed)")
+		// existing fallback logic could be kept or updated, but for now we warn
+		if prices == nil {
+			prices = getEstimatedPrices()
+		}
 	}
 
 	if err := saveToCSV(prices); err != nil {
@@ -90,57 +90,82 @@ func scrapeAndSave() {
 		prices.Gold22K, prices.Gold21K, prices.Gold18K, prices.SilverPrice)
 }
 
+// Structures for parsing the JS JSON data
+type GoldItem struct {
+	N     string  `json:"n"`      // Name, e.g. "22 carat gold price"
+	BvRaw float64 `json:"bv_raw"` // Buy Value Raw (per Bhori?) - matches the big numbers around 100k+
+	SvRaw float64 `json:"sv_raw"` // Sell Value Raw
+	BgRaw float64 `json:"bg_raw"` // Buy Gram Raw
+}
+
+type SilverItem struct {
+	N     string  `json:"n"`
+	BvRaw float64 `json:"bv_raw"`
+	BgRaw float64 `json:"bg_raw"`
+}
+
 func scrapePrices() (*MetalPrice, error) {
-	log.Printf("🔍 Fetching data from %s...\n", baseURL)
+	log.Printf("🔍 Fetching data from %s...\n", targetURL)
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return nil // Follow redirects
-		},
 	}
 
-	// Try both HTTP and HTTPS
-	urls := []string{
-		"https://bot.tools-time.com",
-		"http://bot.tools-time.com",
-		"https://www.bot.tools-time.com",
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
 	}
 
-	var doc *goquery.Document
-	var err error
-	var workingURL string
+	// Important: Set User-Agent to avoid 403
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "*/*")
 
-	for _, url := range urls {
-		req, e := http.NewRequest("GET", url, nil)
-		if e != nil {
-			continue
-		}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
 
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-		req.Header.Set("Accept-Language", "en-US,en;q=0.9,bn;q=0.8")
-
-		resp, e := client.Do(req)
-		if e != nil {
-			log.Printf("  ❌ %s failed: %v\n", url, e)
-			continue
-		}
-
-		if resp.StatusCode == 200 {
-			doc, err = goquery.NewDocumentFromReader(resp.Body)
-			resp.Body.Close()
-			if err == nil {
-				workingURL = url
-				log.Printf("  ✅ Connected to %s\n", url)
-				break
-			}
-		}
-		resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("bad status code: %d", resp.StatusCode)
 	}
 
-	if doc == nil {
-		return nil, fmt.Errorf("could not connect to any URL")
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read body: %v", err)
+	}
+
+	content := string(body)
+
+	// Extract Gold Data
+	// const GoldrPriceTable_goldData = [...];
+	goldRegex := regexp.MustCompile(`const\s+GoldrPriceTable_goldData\s*=\s*(\[.*?\]);`)
+	goldMatches := goldRegex.FindStringSubmatch(content)
+	if len(goldMatches) < 2 {
+		return nil, fmt.Errorf("could not find gold data in JS")
+	}
+
+	// Extract Silver Data
+	// const GoldrPriceTable_silverData = [...];
+	silverRegex := regexp.MustCompile(`const\s+GoldrPriceTable_silverData\s*=\s*(\[.*?\]);`)
+	silverMatches := silverRegex.FindStringSubmatch(content)
+	if len(silverMatches) < 2 {
+		return nil, fmt.Errorf("could not find silver data in JS")
+	}
+
+	// Parse JSON
+	var goldItems []GoldItem
+	if err := json.Unmarshal([]byte(goldMatches[1]), &goldItems); err != nil {
+		return nil, fmt.Errorf("failed to parse gold json: %v", err)
+	}
+
+	var silverItems []SilverItem
+	if err := json.Unmarshal([]byte(silverMatches[1]), &silverItems); err != nil {
+		return nil, fmt.Errorf("failed to parse silver json: %v", err)
+	}
+
+	if len(goldItems) < 4 {
+		return nil, fmt.Errorf("unexpected number of gold items: %d", len(goldItems))
 	}
 
 	now := time.Now()
@@ -148,112 +173,37 @@ func scrapePrices() (*MetalPrice, error) {
 		Timestamp: now.Format(time.RFC3339),
 		Date:      now.Format("2006-01-02"),
 		Time:      now.Format("15:04:05"),
-		Source:    workingURL,
+		Source:    targetURL,
 		Currency:  "BDT",
 	}
 
-	log.Println("🔎 Searching for prices in HTML...")
+	// Mapping based on array index from observation of the JS file:
+	// 0: 22K
+	// 1: 21K
+	// 2: 18K
+	// 3: Traditional
+	price.Gold22K = goldItems[0].BvRaw
+	price.Gold21K = goldItems[1].BvRaw
+	price.Gold18K = goldItems[2].BvRaw
+	price.Traditional = goldItems[3].BvRaw
 
-	// Search in all possible elements
-	doc.Find("table, tr, td, div, span, p, li").Each(func(i int, s *goquery.Selection) {
-		text := strings.TrimSpace(s.Text())
-		if text != "" {
-			extractPrices(text, price)
-		}
-	})
-
-	// Also check for data attributes
-	doc.Find("[data-price], [data-gold], [data-silver]").Each(func(i int, s *goquery.Selection) {
-		if val, exists := s.Attr("data-price"); exists {
-			if num := parsePrice(val); num > 0 {
-				if price.Gold22K == 0 {
-					price.Gold22K = num
-				}
-			}
-		}
-	})
-
-	if price.Gold22K == 0 {
-		return nil, fmt.Errorf("no prices found on page")
+	// Silver: taking 22K (index 0) as the reference price
+	if len(silverItems) > 0 {
+		price.SilverPrice = silverItems[0].BvRaw
 	}
 
 	log.Println("✅ Prices extracted successfully!")
 	return price, nil
 }
 
-func extractPrices(text string, price *MetalPrice) {
-	lower := strings.ToLower(text)
-
-	// 22K Gold
-	if (strings.Contains(lower, "22") || strings.Contains(lower, "22k")) && 
-	   (strings.Contains(lower, "gold") || strings.Contains(lower, "সোনা") || strings.Contains(lower, "ক্যারেট")) {
-		if val := parsePrice(text); val > 0 && price.Gold22K == 0 {
-			price.Gold22K = val
-			log.Printf("  Found 22K: %.2f\n", val)
-		}
-	}
-
-	// 21K Gold
-	if (strings.Contains(lower, "21") || strings.Contains(lower, "21k")) && 
-	   (strings.Contains(lower, "gold") || strings.Contains(lower, "সোনা")) {
-		if val := parsePrice(text); val > 0 && price.Gold21K == 0 {
-			price.Gold21K = val
-			log.Printf("  Found 21K: %.2f\n", val)
-		}
-	}
-
-	// 18K Gold
-	if (strings.Contains(lower, "18") || strings.Contains(lower, "18k")) && 
-	   (strings.Contains(lower, "gold") || strings.Contains(lower, "সোনা")) {
-		if val := parsePrice(text); val > 0 && price.Gold18K == 0 {
-			price.Gold18K = val
-			log.Printf("  Found 18K: %.2f\n", val)
-		}
-	}
-
-	// Traditional/পুরাতন
-	if strings.Contains(lower, "traditional") || strings.Contains(lower, "পুরাতন") || strings.Contains(lower, "পুরনো") {
-		if val := parsePrice(text); val > 0 && price.Traditional == 0 {
-			price.Traditional = val
-			log.Printf("  Found Traditional: %.2f\n", val)
-		}
-	}
-
-	// Silver/রুপা
-	if strings.Contains(lower, "silver") || strings.Contains(lower, "রুপা") {
-		if val := parsePrice(text); val > 0 && price.SilverPrice == 0 {
-			price.SilverPrice = val
-			log.Printf("  Found Silver: %.2f\n", val)
-		}
-	}
-}
-
+// Helper not needed anymore for parsing simple HTML text, but kept if we need utility later
 func parsePrice(text string) float64 {
-	// Remove common non-numeric characters
-	text = strings.ReplaceAll(text, "৳", "")
-	text = strings.ReplaceAll(text, "tk", "")
-	text = strings.ReplaceAll(text, "taka", "")
-	
-	// Find numbers
-	re := regexp.MustCompile(`(\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\d+(?:\.\d{2})?)`)
-	matches := re.FindAllString(text, -1)
-
-	for _, match := range matches {
-		cleaned := strings.ReplaceAll(match, ",", "")
-		if val, err := strconv.ParseFloat(cleaned, 64); err == nil {
-			// Bangladesh gold price range: 50,000 - 200,000 BDT
-			// Silver price range: 50,000 - 150,000 BDT/kg
-			if val >= 1000 && val <= 250000 {
-				return val
-			}
-		}
-	}
 	return 0
 }
 
 func getEstimatedPrices() *MetalPrice {
 	now := time.Now()
-	
+
 	return &MetalPrice{
 		Timestamp:   now.Format(time.RFC3339),
 		Date:        now.Format("2006-01-02"),
