@@ -4,7 +4,6 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -23,7 +22,6 @@ type MetalPrice struct {
 	Gold22K     float64 `json:"gold_22k_per_bhori"`
 	Gold21K     float64 `json:"gold_21k_per_bhori"`
 	Gold18K     float64 `json:"gold_18k_per_bhori"`
-	Gold24K     float64 `json:"gold_24k_per_bhori"`
 	Traditional float64 `json:"traditional_gold_per_bhori"`
 	SilverPrice float64 `json:"silver_per_kg"`
 	Source      string  `json:"source"`
@@ -31,12 +29,7 @@ type MetalPrice struct {
 }
 
 const (
-	// BAJUS - Bangladesh Jewellers Association (Official)
-	bajusURL = "http://www.bajus.org"
-	
-	// Alternative: goldprice.org API endpoint
-	goldPriceAPI = "https://www.goldprice.org/api/rates"
-	
+	bajusURL       = "http://www.bajus.org"
 	scrapeInterval = 2 * time.Hour
 	maxRetries     = 3
 )
@@ -44,7 +37,7 @@ const (
 func main() {
 	log.Println("===========================================")
 	log.Println("Bangladesh Gold & Silver Price Scraper")
-	log.Println("Source: BAJUS + International Prices")
+	log.Println("Source: BAJUS + Estimated Prices")
 	log.Printf("Scraping interval: %v\n", scrapeInterval)
 	log.Println("===========================================")
 
@@ -64,7 +57,6 @@ func scrapeAndSave() {
 	var prices *MetalPrice
 	var err error
 
-	// Try BAJUS first
 	for i := 0; i < maxRetries; i++ {
 		prices, err = scrapePrices()
 		if err == nil && prices.Gold22K > 0 {
@@ -76,10 +68,9 @@ func scrapeAndSave() {
 		}
 	}
 
-	// If BAJUS fails, use international prices
 	if err != nil || prices.Gold22K == 0 {
-		log.Println("Trying international prices...")
-		prices = getInternationalPrices()
+		log.Println("Using estimated prices...")
+		prices = getEstimatedPrices()
 	}
 
 	if err := saveToCSV(prices); err != nil {
@@ -94,12 +85,12 @@ func scrapeAndSave() {
 		log.Println("✅ Successfully saved to JSON")
 	}
 
-	log.Printf("📊 Gold 22K: %.2f BDT/bhori | Gold 21K: %.2f | Gold 18K: %.2f | Silver: %.2f BDT/kg\n",
+	log.Printf("📊 Gold 22K: %.2f | 21K: %.2f | 18K: %.2f | Silver: %.2f\n",
 		prices.Gold22K, prices.Gold21K, prices.Gold18K, prices.SilverPrice)
 }
 
 func scrapePrices() (*MetalPrice, error) {
-	log.Println("🔍 Fetching BAJUS Bangladesh prices...")
+	log.Println("🔍 Fetching prices...")
 
 	client := &http.Client{
 		Timeout: 30 * time.Second,
@@ -136,73 +127,60 @@ func scrapePrices() (*MetalPrice, error) {
 		Currency:  "BDT",
 	}
 
-	// Find prices in tables
 	doc.Find("table tr, div, span, p").Each(func(i int, s *goquery.Selection) {
 		text := strings.TrimSpace(s.Text())
-		extractBDPrices(text, price)
+		extractPrices(text, price)
 	})
 
 	if price.Gold22K == 0 {
 		return nil, fmt.Errorf("no prices found")
 	}
 
-	log.Println("✅ BAJUS prices extracted")
+	log.Println("✅ Prices extracted")
 	return price, nil
 }
 
-func extractBDPrices(text string, price *MetalPrice) {
-	text = strings.ToLower(text)
+func extractPrices(text string, price *MetalPrice) {
+	lower := strings.ToLower(text)
 
-	// 22 Carat
-	if strings.Contains(text, "22") && (strings.Contains(text, "carat") || strings.Contains(text, "k")) {
-		if val := extractBDPrice(text); val > 0 && price.Gold22K == 0 {
+	if strings.Contains(lower, "22") && strings.Contains(lower, "gold") {
+		if val := extractNumber(text); val > 0 && price.Gold22K == 0 {
 			price.Gold22K = val
-			log.Printf("  22K: %.2f BDT/bhori\n", val)
 		}
 	}
 
-	// 21 Carat
-	if strings.Contains(text, "21") && (strings.Contains(text, "carat") || strings.Contains(text, "k")) {
-		if val := extractBDPrice(text); val > 0 && price.Gold21K == 0 {
+	if strings.Contains(lower, "21") && strings.Contains(lower, "gold") {
+		if val := extractNumber(text); val > 0 && price.Gold21K == 0 {
 			price.Gold21K = val
-			log.Printf("  21K: %.2f BDT/bhori\n", val)
 		}
 	}
 
-	// 18 Carat
-	if strings.Contains(text, "18") && (strings.Contains(text, "carat") || strings.Contains(text, "k")) {
-		if val := extractBDPrice(text); val > 0 && price.Gold18K == 0 {
+	if strings.Contains(lower, "18") && strings.Contains(lower, "gold") {
+		if val := extractNumber(text); val > 0 && price.Gold18K == 0 {
 			price.Gold18K = val
-			log.Printf("  18K: %.2f BDT/bhori\n", val)
 		}
 	}
 
-	// Traditional
-	if strings.Contains(text, "traditional") || strings.Contains(text, "পুরাতন") {
-		if val := extractBDPrice(text); val > 0 && price.Traditional == 0 {
+	if strings.Contains(lower, "traditional") {
+		if val := extractNumber(text); val > 0 && price.Traditional == 0 {
 			price.Traditional = val
-			log.Printf("  Traditional: %.2f BDT/bhori\n", val)
 		}
 	}
 
-	// Silver
-	if strings.Contains(text, "silver") || strings.Contains(text, "রুপা") {
-		if val := extractBDPrice(text); val > 0 && price.SilverPrice == 0 {
+	if strings.Contains(lower, "silver") {
+		if val := extractNumber(text); val > 0 && price.SilverPrice == 0 {
 			price.SilverPrice = val
-			log.Printf("  Silver: %.2f BDT/kg\n", val)
 		}
 	}
 }
 
-func extractBDPrice(text string) float64 {
-	// BD prices: 50,000 - 150,000 BDT range
+func extractNumber(text string) float64 {
 	re := regexp.MustCompile(`(\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\d+)`)
 	matches := re.FindAllString(text, -1)
 
 	for _, match := range matches {
 		cleaned := strings.ReplaceAll(match, ",", "")
 		if val, err := strconv.ParseFloat(cleaned, 64); err == nil {
-			// Reasonable BD price range
 			if val >= 50000 && val <= 200000 {
 				return val
 			}
@@ -211,36 +189,21 @@ func extractBDPrice(text string) float64 {
 	return 0
 }
 
-func getInternationalPrices() *MetalPrice {
-	log.Println("🌍 Using international prices...")
-
+func getEstimatedPrices() *MetalPrice {
 	now := time.Now()
 	
-	// Current approximate prices (will be updated with real scraping)
-	// 1 USD = ~110 BDT (approximate)
-	// International gold ~$2050/oz = ~$66/gram
-	// 1 bhori = 11.664 grams
-	// So gold per bhori ≈ $66 * 11.664 * 110 BDT
-	
-	goldPerBhoriUSD := 2050.0 / 31.1035 * 11.664 // ~$770 per bhori
-	bdtRate := 110.0 // USD to BDT
-	
-	price := &MetalPrice{
+	return &MetalPrice{
 		Timestamp:   now.Format(time.RFC3339),
 		Date:        now.Format("2006-01-02"),
 		Time:        now.Format("15:04:05"),
-		Gold22K:     goldPerBhoriUSD * 0.9167 * bdtRate, // 22/24
-		Gold21K:     goldPerBhoriUSD * 0.875 * bdtRate,  // 21/24
-		Gold18K:     goldPerBhoriUSD * 0.75 * bdtRate,   // 18/24
-		Gold24K:     goldPerBhoriUSD * bdtRate,
-		Traditional: goldPerBhoriUSD * 0.9167 * bdtRate,
-		SilverPrice: 25.0 * 11.664 * bdtRate * 1000 / 11.664, // ~per kg
-		Source:      "International (Estimated)",
+		Gold22K:     78500.00,
+		Gold21K:     75200.00,
+		Gold18K:     64300.00,
+		Traditional: 78500.00,
+		SilverPrice: 95000.00,
+		Source:      "Estimated",
 		Currency:    "BDT",
 	}
-
-	log.Printf("  Estimated 22K: %.2f BDT/bhori\n", price.Gold22K)
-	return price
 }
 
 func saveToCSV(price *MetalPrice) error {
