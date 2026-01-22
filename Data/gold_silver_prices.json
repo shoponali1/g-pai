@@ -1,1 +1,14 @@
-
+[
+  {
+    "timestamp": "2026-01-22T18:19:31Z",
+    "date": "2026-01-22",
+    "time": "18:19:31",
+    "gold_22k": 252467.28,
+    "gold_21k": 240978.24,
+    "gold_18k": 206569.44,
+    "traditional_gold": 169652.88,
+    "silver_price": 6881.76,
+    "source": "https://www.goldr.org/price.js",
+    "currency": "BDT"
+  }
+]
