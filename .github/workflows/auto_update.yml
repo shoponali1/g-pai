@@ -5,69 +5,67 @@ on:
     - cron: '0 */2 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: '1.21'
-        cache: false
-    
-    - name: Install dependencies
-      run: go mod download
-    
-    - name: Create data folder
-      run: mkdir -p Data
-    
-    - name: Build and run scraper
-      run: |
-        go build -mod=mod -o scraper main.go
-        timeout 30s ./scraper || true
-        echo "Scraper finished"
-    
-    - name: List files (debug)
-      run: |
-        echo "Files in current directory:"
-        ls -la
-        echo "Files in Data directory:"
-        ls -la Data/ || echo "Data folder empty"
-    
-    - name: Move data files to Data folder
-      run: |
-        if [ -f "gold_silver_prices.csv" ]; then
-          cp gold_silver_prices.csv Data/
-          echo "✅ CSV moved"
-        else
-          echo "❌ CSV not found"
-        fi
-        
-        if [ -f "gold_silver_prices.json" ]; then
-          cp gold_silver_prices.json Data/
-          echo "✅ JSON moved"
-        else
-          echo "❌ JSON not found"
-        fi
-    
-    - name: Check data folder
-      run: |
-        echo "Final files in Data folder:"
-        ls -la Data/
-    
-    - name: Commit and push if changes exist
-      run: |
-        git config --local user.email "github-actions[bot]@users.noreply.github.com"
-        git config --local user.name "github-actions[bot]"
-        git add Data/
-        
-        if git diff --staged --quiet; then
-          echo "No changes to commit"
-        else
-          git commit -m "📊 Auto-update: $(date +'%Y-%m-%d %H:%M')"
-          git push
-          echo "✅ Changes pushed"
-        fi
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache: false
+
+      - name: Install dependencies
+        run: go mod download
+
+      - name: Create data folder
+        run: mkdir -p Data
+
+      - name: Build and run scraper
+        run: |
+          go build -mod=mod -o scraper main.go
+          timeout 30s ./scraper || true
+          echo "Scraper finished"
+
+      - name: List files (debug)
+        run: |
+          echo "Files in current directory:"
+          ls -la
+          echo "Files in Data directory:"
+          ls -la Data/ || echo "Data folder empty"
+
+      - name: Move data files to Data folder
+        run: |
+          if [ -f "gold_silver_prices.csv" ]; then
+            cp gold_silver_prices.csv Data/
+            echo "✅ CSV moved"
+          else
+            echo "❌ CSV not found"
+          fi
+
+          if [ -f "gold_silver_prices.json" ]; then
+            cp gold_silver_prices.json Data/
+            echo "✅ JSON moved"
+          else
+            echo "❌ JSON not found"
+          fi
+
+      - name: Commit and push if changes exist
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add Data/
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "📊 Auto-update: $(date +'%Y-%m-%d %H:%M')"
+            git push
+            echo "✅ Changes pushed"
+          fi
