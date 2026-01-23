@@ -1,2 +1,2 @@
-Timestamp,Date,Time,Gold_22K,Gold_21K,Gold_18K,Traditional,Silver,Currency,Source
-2026-01-22T18:19:31Z,2026-01-22,18:19:31,252467.28,240978.24,206569.44,169652.88,6881.76,BDT,https://www.goldr.org/price.js
+Timestamp,Date,Time,Gold_22K,Gold_21K,Gold_18K,Traditional_Gold,Silver_22K,Silver_21K,Silver_18K,Traditional_Silver,Currency,Source
+2026-01-23T16:35:46Z,2026-01-23,16:35:46,249318.00,238003.92,204003.36,167436.72,6356.88,6065.28,5190.48,3907.44,BDT,https://www.goldr.org/price.js
