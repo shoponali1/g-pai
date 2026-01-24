@@ -2,8 +2,10 @@ name: Auto Scrape and Save Data
 
 on:
   schedule:
-    - cron: '0 */2 * * *'
+    - cron: '*/15 * * * *'  # প্রতি ১৫ মিনিটে (শুধু test এর জন্য)
   workflow_dispatch:
+  push:  # এটা যোগ করুন test করার জন্য
+    branches: [ main ]
 
 permissions:
   contents: write
@@ -13,6 +15,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check trigger
+        run: |
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Time: $(date)"
+          
       - uses: actions/checkout@v4
 
       - name: Set up Go
@@ -65,7 +72,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "📊 Auto-update: $(date +'%Y-%m-%d %H:%M')"
+            git commit -m "📊 Auto-update: $(date +'%Y-%m-%d %H:%M') [Triggered by ${{ github.event_name }}]"
             git push
             echo "✅ Changes pushed"
           fi
