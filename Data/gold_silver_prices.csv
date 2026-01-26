@@ -1,2 +1,2 @@
 Timestamp,Date,Time,Gold_22K,Gold_21K,Gold_18K,Traditional_Gold,Silver_22K,Silver_21K,Silver_18K,Traditional_Silver,Currency,Source
-2026-01-25T05:35:41Z,2026-01-25,05:35:41,252000.00,240000.00,206000.00,169000.00,6800.00,6500.00,5600.00,4200.00,BDT,Estimated (Scrape Failed)
+2026-01-26T09:09:07Z,2026-01-26,09:09:07,255616.56,244010.88,209135.52,171869.04,7231.68,6940.08,5948.64,4432.32,BDT,https://www.goldr.org/price.js
