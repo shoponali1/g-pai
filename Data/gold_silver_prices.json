@@ -1,16 +1,16 @@
 [
   {
-    "timestamp": "2026-04-28T00:08:53Z",
+    "timestamp": "2026-04-28T04:07:48Z",
     "date": "2026-04-28",
-    "time": "00:08:53",
-    "gold_22k": 246926.88,
-    "gold_21k": 235671.12,
-    "gold_18k": 202020.47999999998,
-    "traditional_gold": 164520.72,
-    "silver_22k": 5715.36,
-    "silver_21k": 5423.76,
-    "silver_18k": 4665.599999999999,
-    "silver_traditional": 3499.2,
+    "time": "04:07:48",
+    "gold_22k": 244710.72,
+    "gold_21k": 233571.6,
+    "gold_18k": 200212.56,
+    "traditional_gold": 163062.72,
+    "silver_22k": 5482.08,
+    "silver_21k": 5190.48,
+    "silver_18k": 4490.64,
+    "silver_traditional": 3382.56,
     "source": "https://www.goldr.org/price.js",
     "currency": "BDT"
   }
