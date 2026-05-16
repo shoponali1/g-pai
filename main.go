@@ -30,7 +30,7 @@ type MetalPrice struct {
 }
 
 const (
-	targetURL      = "https://www.goldr.org/price.js"
+	targetURL      = "https://goldbd.org"
 	scrapeInterval = 2 * time.Hour
 	maxRetries     = 3
 )
